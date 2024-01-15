@@ -1,6 +1,6 @@
 use core::time;
-use std::{net::TcpListener, thread::sleep};
 use std::thread::spawn;
+use std::{net::TcpListener, thread::sleep};
 use tungstenite::{
     accept_hdr,
     handshake::server::{ErrorResponse, Request, Response},
@@ -32,10 +32,13 @@ fn main() {
 
             loop {
                 let msg = websocket.read().unwrap();
+                
+                println!("{}", msg);
 
-                if msg.is_binary() || msg.is_text() {
-                    websocket.send(msg).unwrap();
-                }
+                // if msg.is_binary() || msg.is_text() {
+                //     websocket.send(msg).unwrap();
+                // }
+                break;
             }
         });
     }
