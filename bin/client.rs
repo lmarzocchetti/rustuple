@@ -1,8 +1,6 @@
 use rustuple::data::*;
 use rustuple::tuple;
 use rustuple::tuple_space::*;
-use tungstenite::{connect, Message};
-use url::Url;
 
 fn main() -> Result<(), TupleError> {
     // let (mut socket, response) =
@@ -26,16 +24,15 @@ fn main() -> Result<(), TupleError> {
 
     let mut tuple_space = TupleSpace::new("ws://localhost:9001/socket");
 
-    let x1 = Field::Type(Type::Integer);
-    let x2 = Field::Value(Value::Integer(1));
+    let x1 = Field::Value(Value::String("Mannaggia".to_string()));
+    let x2 = Field::Value(Value::Integer(2));
 
     let a = tuple! {
         x1,
         x2
     };
 
-    tuple_space.inb(a)?;
+    tuple_space.out(a)?;
 
     Ok(())
-
 }
