@@ -7,6 +7,7 @@ pub mod data {
     pub enum TupleError {
         TupleAlreadyPresentError,
         TupleNotOnlyDataError,
+        TupleOnlyDataError,
         Error,
         NoError
     }

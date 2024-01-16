@@ -1,9 +1,10 @@
 use std::fmt::Display;
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use std::{net::TcpListener, thread::sleep};
 use clap::Parser;
-use tungstenite::Message;
+use tungstenite::{Message, WebSocket};
 use tungstenite::{
     accept_hdr,
     handshake::server::{ErrorResponse, Request, Response},
@@ -45,6 +46,11 @@ impl TupleSpace {
         
         Err(TupleError::TupleAlreadyPresentError)
     }
+
+    pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
+        let mut space = self.tuples.lock().unwrap();
+        Ok(())
+    }
 }
 
 impl Display for TupleSpace {
@@ -79,14 +85,22 @@ fn handle_out(space: &mut TupleSpace, tuple: Tuple) -> Result<(), TupleError> {
     space.out(tuple)
 }
 
-fn incoming_operations(space: &mut TupleSpace, message: String) -> Result<(), TupleError> {
+fn handle_in_non_bl(space: &mut TupleSpace, socket: &mut WebSocket<TcpStream>, tuple: Tuple) -> Result<(), TupleError> {
+    if tuple.has_data_only() {
+        return Err(TupleError::TupleOnlyDataError);
+    }
+
+    space.in_non_bl(tuple)
+}
+
+fn incoming_operations(space: &mut TupleSpace, socket: &mut WebSocket<TcpStream>, message: String) -> Result<(), TupleError> {
     let operation = deserialize(message)?;
 
     match operation {
         Operation::Out(val) => return handle_out(space, val),
         Operation::InBl(val) => panic!("InBl not implemented"),
         Operation::RdBl(val) => panic!("RdBl not implemented"),
-        Operation::InNonBl(val) => panic!("InNonBl not implemented"),
+        Operation::InNonBl(val) => return handle_in_non_bl(space, socket, val),
         Operation::RdNonBl(val) => panic!("RdNonBl not implemented"),
     }
 }
@@ -117,7 +131,7 @@ fn main() {
             let msg = websocket.read().unwrap();
 
             let res = match msg {
-                Message::Text(val) => incoming_operations(&mut cloned, val),
+                Message::Text(val) => incoming_operations(&mut cloned, &mut websocket, val),
                 _ => panic!("Error: Not received a string!")
             };
 
