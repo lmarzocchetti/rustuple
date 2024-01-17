@@ -23,4 +23,10 @@ use rustuple::data;
 use rustuple::tuple_space;
 ```
 
-In the data module there are all the data structures and in the tuple_space there is the struct to connect and access the Tuple Space. (see example)
+In the data module there are all the data structures and in the tuple_space there is the struct to connect and access the Tuple Space. (see the bin folder for the example client)
+
+### Documentation
+You can access the documentation by run:
+```
+$ cargo doc --release --open 
+```
