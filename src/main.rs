@@ -1,15 +1,16 @@
+use clap::Parser;
+use rustuple::data::{Operation, Tuple, TupleError};
 use std::fmt::Display;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
+use std::vec;
 use std::{net::TcpListener, thread::sleep};
-use clap::Parser;
-use tungstenite::{Message, WebSocket};
 use tungstenite::{
     accept_hdr,
     handshake::server::{ErrorResponse, Request, Response},
 };
-use rustuple::data::{Tuple, Operation, TupleError};
+use tungstenite::{Message, WebSocket};
 
 #[derive(Parser)]
 struct Cli {
@@ -17,39 +18,53 @@ struct Cli {
     ip_addr: String,
 
     /// Port number
-    port_num: String
+    port_num: String,
 }
 
 #[derive(Clone)]
 struct TupleSpace {
-    tuples: Arc<Mutex<Vec<Tuple>>>
+    tuples: Arc<Mutex<Vec<Tuple>>>,
 }
 
 impl TupleSpace {
     pub fn new() -> Self {
-        TupleSpace{ tuples: Arc::new(Mutex::new(vec![]))}
+        TupleSpace {
+            tuples: Arc::new(Mutex::new(vec![])),
+        }
     }
 
     pub fn clone(&self) -> Self {
-        TupleSpace { tuples: Arc::clone(&self.tuples) }
+        TupleSpace {
+            tuples: Arc::clone(&self.tuples),
+        }
     }
 
     pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
         let mut space = self.tuples.lock().unwrap();
 
-        if !space.iter().any(|elem| {
-            elem == &tuple
-        }) {
+        if !space.iter().any(|elem| elem == &tuple) {
             space.push(tuple);
-            return Ok(())
+            return Ok(());
         }
-        
+
         Err(TupleError::TupleAlreadyPresentError)
     }
 
-    pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
+    pub fn in_non_bl(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
         let mut space = self.tuples.lock().unwrap();
-        Ok(())
+
+        let ret = space
+            .iter()
+            .filter(|&elem| elem.len() == tuple.len())
+            .filter(|&elem| elem.matching_tuples(tuple.clone()))
+            .cloned()
+            .collect::<Vec<Tuple>>();
+
+        if ret.is_empty() {
+            return Err(TupleError::NoMatchingTupleError);
+        } else {
+            return Ok(ret);
+        }
     }
 }
 
@@ -77,6 +92,16 @@ fn deserialize(message: String) -> Result<Operation, TupleError> {
     }
 }
 
+fn serialize_vector(vector: Vec<Tuple>) -> Result<String, TupleError> {
+    match serde_json::to_string(&vector) {
+        Ok(res) => Ok(res),
+        Err(e) => {
+            println!("Error serializing! Error: {}", e);
+            Err(TupleError::Error)
+        }
+    }
+}
+
 fn handle_out(space: &mut TupleSpace, tuple: Tuple) -> Result<(), TupleError> {
     if !tuple.has_data_only() {
         return Err(TupleError::TupleNotOnlyDataError);
@@ -85,15 +110,29 @@ fn handle_out(space: &mut TupleSpace, tuple: Tuple) -> Result<(), TupleError> {
     space.out(tuple)
 }
 
-fn handle_in_non_bl(space: &mut TupleSpace, socket: &mut WebSocket<TcpStream>, tuple: Tuple) -> Result<(), TupleError> {
+fn handle_in_non_bl(
+    space: &mut TupleSpace,
+    socket: &mut WebSocket<TcpStream>,
+    tuple: Tuple,
+) -> Result<(), TupleError> {
     if tuple.has_data_only() {
         return Err(TupleError::TupleOnlyDataError);
     }
 
-    space.in_non_bl(tuple)
+    let ret = space.in_non_bl(&tuple)?;
+    let serialized = serialize_vector(ret)?;
+
+    match socket.write(Message::Text(serialized)) {
+        Ok(_) => Ok(()),
+        Err(_) => return Err(TupleError::Error),
+    }
 }
 
-fn incoming_operations(space: &mut TupleSpace, socket: &mut WebSocket<TcpStream>, message: String) -> Result<(), TupleError> {
+fn incoming_operations(
+    space: &mut TupleSpace,
+    socket: &mut WebSocket<TcpStream>,
+    message: String,
+) -> Result<(), TupleError> {
     let operation = deserialize(message)?;
 
     match operation {
@@ -128,25 +167,36 @@ fn main() {
         spawn(move || {
             let mut websocket = accept_hdr(stream.unwrap(), callback).unwrap();
 
-            let msg = websocket.read().unwrap();
+            loop {
+                let msg = websocket.read();
 
-            let res = match msg {
-                Message::Text(val) => incoming_operations(&mut cloned, &mut websocket, val),
-                _ => panic!("Error: Not received a string!")
-            };
+                let res = match msg {
+                    Ok(mex) => match mex {
+                        Message::Text(val) => incoming_operations(&mut cloned, &mut websocket, val),
+                        Message::Close(_) => {
+                            break;
+                        }
+                        _ => panic!("Operation not permitted!"),
+                    },
+                    Err(err) => {
+                        break;
+                    }
+                };
 
-            println!("{:?}", res.is_err());
-
-            match res {
-                Ok(_) => {
-                    let _ = websocket.send(Message::Text(serde_json::to_string(&TupleError::NoError).unwrap()));
-                },
-                Err(error) => {
-                    let _ = websocket.send(Message::Text(serde_json::to_string(&error).unwrap()));
+                match res {
+                    Ok(_) => {
+                        let _ = websocket.send(Message::Text(
+                            serde_json::to_string(&TupleError::NoError).unwrap(),
+                        ));
+                    }
+                    Err(error) => {
+                        let _ =
+                            websocket.send(Message::Text(serde_json::to_string(&error).unwrap()));
+                    }
                 }
-            }
 
-            println!("Tuple Space: {}", cloned);
+                println!("Tuple Space: {}", cloned);
+            }
         });
     }
 }

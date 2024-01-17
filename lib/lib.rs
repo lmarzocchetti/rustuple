@@ -8,6 +8,7 @@ pub mod data {
         TupleAlreadyPresentError,
         TupleNotOnlyDataError,
         TupleOnlyDataError,
+        NoMatchingTupleError,
         Error,
         NoError
     }
@@ -88,6 +89,52 @@ pub mod data {
 
             true
         }
+
+        pub fn len(&self) -> usize {
+            self.tuples.len()
+        }
+
+        pub fn matching_tuples(&self, other: Tuple) -> bool {
+            for (i, j) in self.tuples.iter().zip(other.tuples.iter()) {
+                match j {
+                    Field::Value(_) => {
+                        if i == j {
+                            continue;
+                        }
+                        else {
+                            return false;
+                        }
+                    },
+                    Field::Type(tp) => {
+                        match tp {
+                            Type::Integer => {
+                                match i {
+                                    Field::Value(val) => {
+                                        match val {
+                                            Value::Integer(_) => continue,
+                                            _ => return false
+                                        }
+                                    },
+                                    _ => panic!("Saved a tuple with a type Field!")
+                                }
+                            },
+                            Type::String => {
+                                match i {
+                                    Field::Value(val) => {
+                                        match val {
+                                            Value::String(_) => continue,
+                                            _ => return false
+                                        }
+                                    },
+                                    _ => panic!("Saved a tuple with a type Field!")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            true
+        }
     }
 
     impl Display for Tuple {
@@ -149,7 +196,7 @@ macro_rules! tuple {
 }
 
 pub mod tuple_space {
-    use std::net::TcpStream;
+    use std::{net::TcpStream, thread::sleep, time::Duration};
 
     use tungstenite::{connect, Message, WebSocket, stream::MaybeTlsStream};
     use url::Url;
@@ -186,6 +233,18 @@ pub mod tuple_space {
                 Message::Text(val) => return serde_json::from_str(&val).unwrap(),
                 _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!")
             }
+        }
+
+        fn deserialize_vector(msg: Message) -> Result<Vec<Tuple>, serde_json::Error> {
+            match msg {
+                Message::Text(val) => return serde_json::from_str(&val),
+                _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!")
+            }
+        }
+
+        pub fn close(&mut self) {
+            self.socket.close(Option::None).unwrap();
+            self.socket.flush().unwrap()
         }
 
         pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
@@ -233,18 +292,6 @@ pub mod tuple_space {
             }
         }
 
-        pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
-            let serialized = TupleSpace::serialize(Operation::InNonBl(tuple))?;
-
-            let res = self.socket
-                .send(Message::Text(serialized));
-
-            match res {
-                Ok(_) => Ok(()),
-                Err(_) => Err(TupleError::Error)
-            }
-        }
-
         pub fn rd_non_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
             let serialized = TupleSpace::serialize(Operation::RdNonBl(tuple))?;
 
@@ -254,6 +301,36 @@ pub mod tuple_space {
             match res {
                 Ok(_) => Ok(()),
                 Err(_) => Err(TupleError::Error)
+            }
+
+
+        }
+
+        pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
+            let serialized = TupleSpace::serialize(Operation::InNonBl(tuple))?;
+
+            let res = self.socket
+                .send(Message::Text(serialized));
+
+            match res {
+                Ok(_) => (),
+                Err(_) => return Err(TupleError::Error)
+            }
+
+            let res = self.socket.read().unwrap();
+            let vector = match TupleSpace::deserialize_vector(res.clone()) {
+                Ok(vec) => vec,
+                Err(_) => {
+                    return Err(TupleSpace::deserialize_error(res));
+                }
+            };
+
+            let no_error = self.socket.read().unwrap();
+            let no = TupleSpace::deserialize_error(no_error);
+
+            match no {
+                TupleError::NoError => Ok(vector),
+                _ => Err(no)
             }
         }
     }
