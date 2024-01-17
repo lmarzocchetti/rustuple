@@ -1,11 +1,13 @@
 use clap::Parser;
 use rustuple::data::{Operation, Tuple, TupleError};
 use std::fmt::Display;
+use std::net::TcpListener;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
+use std::thread::sleep;
 use std::thread::spawn;
+use std::time::Duration;
 use std::vec;
-use std::{net::TcpListener, thread::sleep};
 use tungstenite::{
     accept_hdr,
     handshake::server::{ErrorResponse, Request, Response},
@@ -52,6 +54,36 @@ impl TupleSpace {
 
     pub fn in_non_bl(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
         let mut space = self.tuples.lock().unwrap();
+        let mut to_remove: Vec<usize> = vec![];
+
+        let ret = space
+            .iter()
+            .filter(|&elem| elem.len() == tuple.len())
+            .filter(|&elem| elem.matching_tuples(tuple.clone()))
+            .cloned()
+            .collect::<Vec<Tuple>>();
+
+        for i in ret.clone().iter() {
+            let finded = space.iter_mut().enumerate().find(|elem| elem.1 == i);
+            match finded {
+                Some(val) => to_remove.push(val.0),
+                None => continue,
+            }
+        }
+
+        for i in to_remove.iter() {
+            space.remove(*i);
+        }
+
+        if ret.is_empty() {
+            return Err(TupleError::NoMatchingTupleError);
+        } else {
+            return Ok(ret);
+        }
+    }
+
+    pub fn rd_non_bl(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
+        let space = self.tuples.lock().unwrap();
 
         let ret = space
             .iter()
@@ -110,6 +142,52 @@ fn handle_out(space: &mut TupleSpace, tuple: Tuple) -> Result<(), TupleError> {
     space.out(tuple)
 }
 
+fn handle_in_bl(
+    space: &mut TupleSpace,
+    socket: &mut WebSocket<TcpStream>,
+    tuple: Tuple,
+) -> Result<(), TupleError> {
+    if tuple.has_data_only() {
+        return Err(TupleError::TupleOnlyDataError);
+    }
+
+    let mut ret = space.in_non_bl(&tuple);
+    while ret.is_err() {
+        sleep(Duration::from_secs(1));
+        ret = space.in_non_bl(&tuple);
+    }
+
+    let serialized = serialize_vector(ret.unwrap())?;
+
+    match socket.write(Message::Text(serialized)) {
+        Ok(_) => Ok(()),
+        Err(_) => return Err(TupleError::Error),
+    }
+}
+
+fn handle_rd_bl(
+    space: &mut TupleSpace,
+    socket: &mut WebSocket<TcpStream>,
+    tuple: Tuple,
+) -> Result<(), TupleError> {
+    if tuple.has_data_only() {
+        return Err(TupleError::TupleOnlyDataError);
+    }
+
+    let mut ret = space.rd_non_bl(&tuple);
+    while ret.is_err() {
+        sleep(Duration::from_secs(1));
+        ret = space.rd_non_bl(&tuple);
+    }
+
+    let serialized = serialize_vector(ret.unwrap())?;
+
+    match socket.write(Message::Text(serialized)) {
+        Ok(_) => Ok(()),
+        Err(_) => return Err(TupleError::Error),
+    }
+}
+
 fn handle_in_non_bl(
     space: &mut TupleSpace,
     socket: &mut WebSocket<TcpStream>,
@@ -128,6 +206,24 @@ fn handle_in_non_bl(
     }
 }
 
+fn handle_rd_non_bl(
+    space: &mut TupleSpace,
+    socket: &mut WebSocket<TcpStream>,
+    tuple: Tuple,
+) -> Result<(), TupleError> {
+    if tuple.has_data_only() {
+        return Err(TupleError::TupleOnlyDataError);
+    }
+
+    let ret = space.rd_non_bl(&tuple)?;
+    let serialized = serialize_vector(ret)?;
+
+    match socket.write(Message::Text(serialized)) {
+        Ok(_) => Ok(()),
+        Err(_) => return Err(TupleError::Error),
+    }
+}
+
 fn incoming_operations(
     space: &mut TupleSpace,
     socket: &mut WebSocket<TcpStream>,
@@ -137,10 +233,10 @@ fn incoming_operations(
 
     match operation {
         Operation::Out(val) => return handle_out(space, val),
-        Operation::InBl(val) => panic!("InBl not implemented"),
-        Operation::RdBl(val) => panic!("RdBl not implemented"),
+        Operation::InBl(val) => return handle_in_bl(space, socket, val),
+        Operation::RdBl(val) => return handle_rd_bl(space, socket, val),
         Operation::InNonBl(val) => return handle_in_non_bl(space, socket, val),
-        Operation::RdNonBl(val) => panic!("RdNonBl not implemented"),
+        Operation::RdNonBl(val) => return handle_rd_non_bl(space, socket, val),
     }
 }
 
@@ -178,7 +274,7 @@ fn main() {
                         }
                         _ => panic!("Operation not permitted!"),
                     },
-                    Err(err) => {
+                    Err(_) => {
                         break;
                     }
                 };

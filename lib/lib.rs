@@ -196,7 +196,7 @@ macro_rules! tuple {
 }
 
 pub mod tuple_space {
-    use std::{net::TcpStream, thread::sleep, time::Duration};
+    use std::net::TcpStream;
 
     use tungstenite::{connect, Message, WebSocket, stream::MaybeTlsStream};
     use url::Url;
@@ -268,42 +268,88 @@ pub mod tuple_space {
             }
         }
 
-        pub fn in_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
+        pub fn in_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::InBl(tuple))?;
 
             let res = self.socket
                 .send(Message::Text(serialized));
 
             match res {
-                Ok(_) => Ok(()),
-                Err(_) => Err(TupleError::Error)
+                Ok(_) => (),
+                Err(_) => return Err(TupleError::Error)
+            }
+
+            let res = self.socket.read().unwrap();
+            let vector = match TupleSpace::deserialize_vector(res.clone()) {
+                Ok(vec) => vec,
+                Err(_) => {
+                    return Err(TupleSpace::deserialize_error(res));
+                }
+            };
+
+            let no_error = self.socket.read().unwrap();
+            let no = TupleSpace::deserialize_error(no_error);
+
+            match no {
+                TupleError::NoError => Ok(vector),
+                _ => Err(no)
             }
         }
 
-        pub fn rd_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
+        pub fn rd_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::RdBl(tuple))?;
 
             let res = self.socket
                 .send(Message::Text(serialized));
 
             match res {
-                Ok(_) => Ok(()),
-                Err(_) => Err(TupleError::Error)
+                Ok(_) => (),
+                Err(_) => return Err(TupleError::Error)
+            }
+
+            let res = self.socket.read().unwrap();
+            let vector = match TupleSpace::deserialize_vector(res.clone()) {
+                Ok(vec) => vec,
+                Err(_) => {
+                    return Err(TupleSpace::deserialize_error(res));
+                }
+            };
+
+            let no_error = self.socket.read().unwrap();
+            let no = TupleSpace::deserialize_error(no_error);
+
+            match no {
+                TupleError::NoError => Ok(vector),
+                _ => Err(no)
             }
         }
 
-        pub fn rd_non_bl(&mut self, tuple: Tuple) -> Result<(), TupleError> {
+        pub fn rd_non_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::RdNonBl(tuple))?;
 
             let res = self.socket
                 .send(Message::Text(serialized));
 
             match res {
-                Ok(_) => Ok(()),
-                Err(_) => Err(TupleError::Error)
+                Ok(_) => (),
+                Err(_) => return Err(TupleError::Error)
             }
 
+            let res = self.socket.read().unwrap();
+            let vector = match TupleSpace::deserialize_vector(res.clone()) {
+                Ok(vec) => vec,
+                Err(_) => {
+                    return Err(TupleSpace::deserialize_error(res));
+                }
+            };
 
+            let no_error = self.socket.read().unwrap();
+            let no = TupleSpace::deserialize_error(no_error);
+
+            match no {
+                TupleError::NoError => Ok(vector),
+                _ => Err(no)
+            }
         }
 
         pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
