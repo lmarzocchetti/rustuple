@@ -1,8 +1,10 @@
+/// Modules that contain Data structures used by the library
 pub mod data {
     use std::fmt::Display;
 
     use serde::{Deserialize, Serialize};
 
+    /// Error used by the library and returned by the server
     #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
     pub enum TupleError {
         TupleAlreadyPresentError,
@@ -79,6 +81,7 @@ pub mod data {
             self.tuples.push(field)
         }
 
+        /// Helper method to check if the tuple contain only data and it is not a tuple for pattern matching
         pub fn has_data_only(&self) -> bool {
             for i in self.tuples.iter() {
                 match i {
@@ -94,6 +97,7 @@ pub mod data {
             self.tuples.len()
         }
 
+        /// Return true if two tuples match, otherwise false
         pub fn matching_tuples(&self, other: Tuple) -> bool {
             for (i, j) in self.tuples.iter().zip(other.tuples.iter()) {
                 match j {
@@ -195,6 +199,7 @@ macro_rules! tuple {
     };
 }
 
+/// Module that contain the implementation of the Tuple Space operations using the data structures of the "data" module
 pub mod tuple_space {
     use std::net::TcpStream;
 
@@ -203,11 +208,13 @@ pub mod tuple_space {
 
     use crate::data::{Tuple, Operation, TupleError};
 
+    /// Struct to handle the connection and the operation between the client and the server
     pub struct TupleSpace {
         socket: WebSocket<MaybeTlsStream<TcpStream>>
     }
 
     impl TupleSpace {
+        /// Construct a new Tuple Space and open the connection on the ip address and port passed in
         pub fn new(ip_addr: &str) -> Self {
             let (socket, response) = 
                 connect(Url::parse(ip_addr).unwrap()).expect("Can't connect");
@@ -242,11 +249,13 @@ pub mod tuple_space {
             }
         }
 
+        /// Close the connection
         pub fn close(&mut self) {
             self.socket.close(Option::None).unwrap();
             self.socket.flush().unwrap()
         }
 
+        /// Implementation of the Out operation for the client, returing an Error
         pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
             let serialized = TupleSpace::serialize(Operation::Out(tuple))?;
 
@@ -268,116 +277,59 @@ pub mod tuple_space {
             }
         }
 
+        /// Implementation of the operations which are the same for the in and rd operation (blocking and non-blocking)
+        fn in_rd(&mut self, operation: String) -> Result<Vec<Tuple>, TupleError> {
+            let res = self.socket
+                .send(Message::Text(operation));
+
+            match res {
+                Ok(_) => (),
+                Err(_) => return Err(TupleError::Error)
+            }
+
+            let res = self.socket.read().unwrap();
+            let vector = match TupleSpace::deserialize_vector(res.clone()) {
+                Ok(vec) => vec,
+                Err(_) => {
+                    return Err(TupleSpace::deserialize_error(res));
+                }
+            };
+
+            let no_error = self.socket.read().unwrap();
+            let no = TupleSpace::deserialize_error(no_error);
+
+            match no {
+                TupleError::NoError => Ok(vector),
+                _ => Err(no)
+            }
+        }
+
+        /// In blocking operation, return when the requested matching tuples are finded and erased in the server
         pub fn in_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::InBl(tuple))?;
 
-            let res = self.socket
-                .send(Message::Text(serialized));
-
-            match res {
-                Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
-            }
-
-            let res = self.socket.read().unwrap();
-            let vector = match TupleSpace::deserialize_vector(res.clone()) {
-                Ok(vec) => vec,
-                Err(_) => {
-                    return Err(TupleSpace::deserialize_error(res));
-                }
-            };
-
-            let no_error = self.socket.read().unwrap();
-            let no = TupleSpace::deserialize_error(no_error);
-
-            match no {
-                TupleError::NoError => Ok(vector),
-                _ => Err(no)
-            }
+            self.in_rd(serialized)
         }
 
+        /// Rd blocking operation, return when the requested matching tuples are finded in the server
         pub fn rd_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::RdBl(tuple))?;
 
-            let res = self.socket
-                .send(Message::Text(serialized));
-
-            match res {
-                Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
-            }
-
-            let res = self.socket.read().unwrap();
-            let vector = match TupleSpace::deserialize_vector(res.clone()) {
-                Ok(vec) => vec,
-                Err(_) => {
-                    return Err(TupleSpace::deserialize_error(res));
-                }
-            };
-
-            let no_error = self.socket.read().unwrap();
-            let no = TupleSpace::deserialize_error(no_error);
-
-            match no {
-                TupleError::NoError => Ok(vector),
-                _ => Err(no)
-            }
+            self.in_rd(serialized)
         }
 
+        /// Rd non-blocking operation, return NoMatchingTupleError in case of no matching tuples
         pub fn rd_non_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::RdNonBl(tuple))?;
 
-            let res = self.socket
-                .send(Message::Text(serialized));
-
-            match res {
-                Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
-            }
-
-            let res = self.socket.read().unwrap();
-            let vector = match TupleSpace::deserialize_vector(res.clone()) {
-                Ok(vec) => vec,
-                Err(_) => {
-                    return Err(TupleSpace::deserialize_error(res));
-                }
-            };
-
-            let no_error = self.socket.read().unwrap();
-            let no = TupleSpace::deserialize_error(no_error);
-
-            match no {
-                TupleError::NoError => Ok(vector),
-                _ => Err(no)
-            }
+            self.in_rd(serialized)
         }
 
+        /// In non-blocking operation, return NoMatchingTupleError in case of no matching tuples
         pub fn in_non_bl(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, TupleError> {
             let serialized = TupleSpace::serialize(Operation::InNonBl(tuple))?;
 
-            let res = self.socket
-                .send(Message::Text(serialized));
-
-            match res {
-                Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
-            }
-
-            let res = self.socket.read().unwrap();
-            let vector = match TupleSpace::deserialize_vector(res.clone()) {
-                Ok(vec) => vec,
-                Err(_) => {
-                    return Err(TupleSpace::deserialize_error(res));
-                }
-            };
-
-            let no_error = self.socket.read().unwrap();
-            let no = TupleSpace::deserialize_error(no_error);
-
-            match no {
-                TupleError::NoError => Ok(vector),
-                _ => Err(no)
-            }
+            self.in_rd(serialized)
         }
     }
 }

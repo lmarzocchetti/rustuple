@@ -14,6 +14,7 @@ use tungstenite::{
 };
 use tungstenite::{Message, WebSocket};
 
+/// Parser for command line arguments
 #[derive(Parser)]
 struct Cli {
     /// Ip Address
@@ -23,24 +24,28 @@ struct Cli {
     port_num: String,
 }
 
+/// Struct to create a new Tuple data space, which is mutually accessed by threads
 #[derive(Clone)]
 struct TupleSpace {
     tuples: Arc<Mutex<Vec<Tuple>>>,
 }
 
 impl TupleSpace {
+    /// Construct a new Tuple Space
     pub fn new() -> Self {
         TupleSpace {
             tuples: Arc::new(Mutex::new(vec![])),
         }
     }
 
+    /// Needed for mutual exclusion to increment the strong reference counting of the Arc
     pub fn clone(&self) -> Self {
         TupleSpace {
             tuples: Arc::clone(&self.tuples),
         }
     }
 
+    /// Insert a new Tuple in the Tuple Space and return Ok(()) if Tuple Space not contain the specific Tuple, otherwise an Error
     pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
         let mut space = self.tuples.lock().unwrap();
 
@@ -52,7 +57,8 @@ impl TupleSpace {
         Err(TupleError::TupleAlreadyPresentError)
     }
 
-    pub fn in_non_bl(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
+    /// Extract some tuples out of the Tuple Space, returning Ok(Vec<Tuple>) if at least one is matching, otherwise return an Error
+    pub fn _in(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
         let mut space = self.tuples.lock().unwrap();
         let mut to_remove: Vec<usize> = vec![];
 
@@ -82,7 +88,8 @@ impl TupleSpace {
         }
     }
 
-    pub fn rd_non_bl(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
+    /// Read some tuples of the Tuple Space, returning Ok(Vec<Tuple>) if at least one is matching, otherwise return an Error
+    pub fn _rd(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
         let space = self.tuples.lock().unwrap();
 
         let ret = space
@@ -151,10 +158,10 @@ fn handle_in_bl(
         return Err(TupleError::TupleOnlyDataError);
     }
 
-    let mut ret = space.in_non_bl(&tuple);
+    let mut ret = space._in(&tuple);
     while ret.is_err() {
         sleep(Duration::from_secs(1));
-        ret = space.in_non_bl(&tuple);
+        ret = space._in(&tuple);
     }
 
     let serialized = serialize_vector(ret.unwrap())?;
@@ -174,10 +181,10 @@ fn handle_rd_bl(
         return Err(TupleError::TupleOnlyDataError);
     }
 
-    let mut ret = space.rd_non_bl(&tuple);
+    let mut ret = space._rd(&tuple);
     while ret.is_err() {
         sleep(Duration::from_secs(1));
-        ret = space.rd_non_bl(&tuple);
+        ret = space._rd(&tuple);
     }
 
     let serialized = serialize_vector(ret.unwrap())?;
@@ -197,7 +204,7 @@ fn handle_in_non_bl(
         return Err(TupleError::TupleOnlyDataError);
     }
 
-    let ret = space.in_non_bl(&tuple)?;
+    let ret = space._in(&tuple)?;
     let serialized = serialize_vector(ret)?;
 
     match socket.write(Message::Text(serialized)) {
@@ -215,7 +222,7 @@ fn handle_rd_non_bl(
         return Err(TupleError::TupleOnlyDataError);
     }
 
-    let ret = space.rd_non_bl(&tuple)?;
+    let ret = space._rd(&tuple)?;
     let serialized = serialize_vector(ret)?;
 
     match socket.write(Message::Text(serialized)) {
