@@ -3,7 +3,6 @@ pub mod data {
     use std::fmt::Display;
 
     use serde::{Deserialize, Serialize};
-    use serde_json::map::Iter;
 
     /// Error used by the library and returned by the server
     #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

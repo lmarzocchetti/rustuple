@@ -88,7 +88,7 @@ impl Node {
                 Ok(val) => received_proposal = val,
                 Err(_) => continue
             }
-            sleep(Duration::from_secs(1));
+            sleep(Duration::from_secs_f32(0.1));
 
             match received_proposal[0].iter().last().unwrap() {
                 Field::Value(Value::Integer(val)) => {
