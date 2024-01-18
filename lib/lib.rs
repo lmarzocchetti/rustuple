@@ -3,6 +3,7 @@ pub mod data {
     use std::fmt::Display;
 
     use serde::{Deserialize, Serialize};
+    use serde_json::map::Iter;
 
     /// Error used by the library and returned by the server
     #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -95,6 +96,11 @@ pub mod data {
 
         pub fn len(&self) -> usize {
             self.tuples.len()
+        }
+
+        /// Iterate over elements of the Tuple
+        pub fn iter(&self) -> std::slice::Iter<'_, Field> {
+            self.tuples.iter()
         }
 
         /// Return true if two tuples match, otherwise false

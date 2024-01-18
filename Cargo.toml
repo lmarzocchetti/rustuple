@@ -19,3 +19,7 @@ path = "lib/lib.rs"
 [[bin]]
 name = "client"
 path = "bin/client.rs"
+
+[[bin]]
+name = "lcr_algorithm"
+path = "bin/lcr_algorithm.rs"
