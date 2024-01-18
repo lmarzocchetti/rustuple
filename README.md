@@ -22,9 +22,9 @@ $ ./rustuple <IP_ADDR> <PORT_NUM>
 ```
 I use in the example client IP_ADDR = "127.0.0.1" and PORT_NUM = "9001"
 
-Compile the example client that used the library:
+Run the example algorithm (leader election: lcr algorithm) that used the library:
 ```
-$ cargo build --bin --release client
+$ cargo run --bin --release lcr_algorithm
 ```
 
 To use the Library create a new [[bin]] in the Cargo.toml file and simply use:
