@@ -49,7 +49,7 @@ impl TupleSpace {
     pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
         let mut space = self.tuples.lock().unwrap();
 
-        if !space.iter().any(|elem| elem == &tuple) {
+        if !space.iter().any(|elem| elem.equal(&tuple)) {
             space.push(tuple);
             return Ok(());
         }
@@ -60,7 +60,8 @@ impl TupleSpace {
     /// Extract some tuples out of the Tuple Space, returning Ok(Vec<Tuple>) if at least one is matching, otherwise return an Error
     pub fn _in(&mut self, tuple: &Tuple) -> Result<Vec<Tuple>, TupleError> {
         let mut space = self.tuples.lock().unwrap();
-        let mut to_remove: Vec<usize> = vec![];
+        let mut read_space = space.clone();
+        let to_remove: Vec<usize> = vec![];
 
         let ret = space
             .iter()
@@ -70,9 +71,12 @@ impl TupleSpace {
             .collect::<Vec<Tuple>>();
 
         for i in ret.clone().iter() {
-            let finded = space.iter_mut().enumerate().find(|elem| elem.1 == i);
+            let finded = read_space.iter().enumerate().find(|elem| elem.1.equal(i));
             match finded {
-                Some(val) => to_remove.push(val.0),
+                Some(val) => {
+                    space.remove(val.0);
+                    read_space = space.clone();
+                },
                 None => continue,
             }
         }

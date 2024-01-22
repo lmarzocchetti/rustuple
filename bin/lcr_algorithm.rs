@@ -1,6 +1,5 @@
-use std::thread::sleep;
 use std::thread::spawn;
-use std::time::Duration;
+use std::vec;
 
 use rustuple::data::*;
 use rustuple::tuple;
@@ -27,7 +26,11 @@ impl Node {
             Field::Value(Value::Integer(prop_id))
         );
         
-        self.tuple_space.out(tuple)
+        match self.tuple_space.out(tuple) {
+            Ok(_) => Ok(()),
+            Err(TupleError::TupleAlreadyPresentError) => Ok(()),
+            Err(err) =>  Err(err)   
+        }
     }
 
     fn receive_leader_proposal(&mut self) -> Result<Vec<Tuple>, TupleError> {
@@ -36,6 +39,7 @@ impl Node {
             Field::Type(Type::Integer)
         );
 
+        // change to rd in case
         self.tuple_space.in_non_bl(tuple)
     }
 
@@ -67,6 +71,22 @@ impl Node {
         }
     }
 
+    fn received_max(vector: &Vec<Tuple>) -> Vec<Tuple> {
+        let a = vector.iter().enumerate().map(|(idx, a)| {
+            match a.iter().last().unwrap() {
+                Field::Value(Value::Integer(val)) => (idx, val.clone()),
+                _ => (idx, 0),
+            }
+        })
+        .max_by_key(|x| {
+            x.1
+        }).unwrap();
+
+        let ret = &vector[a.0];
+
+        vec![ret.clone()]
+    }
+
     fn run(&mut self) -> Result<(), TupleError> {
         self.send_leader_proposal(self.id)?;
 
@@ -82,13 +102,18 @@ impl Node {
                 Err(_) => ()
             };
 
-            let received_proposal: Vec<Tuple>;
+            let mut received_proposal: Vec<Tuple>;
             let received_proposal_or_err = self.receive_leader_proposal();
             match received_proposal_or_err {
                 Ok(val) => received_proposal = val,
                 Err(_) => continue
             }
-            sleep(Duration::from_secs_f32(0.1));
+
+            if received_proposal.len() != 1 && !received_proposal.is_empty() {
+                received_proposal = Node::received_max(&received_proposal);
+            }
+
+            assert!(received_proposal.len() == 1);
 
             match received_proposal[0].iter().last().unwrap() {
                 Field::Value(Value::Integer(val)) => {
@@ -130,14 +155,27 @@ fn main() -> Result<(), TupleError> {
                 right = 1;
             }
 
+            println!("Spawning node with ID: {} and RIGHT: {}", i, right);
+
             let mut node = Node::new(i, right, "ws://localhost:9001/socket");
-            let _ = node.run();
+            let err = node.run();
+            match err {
+                Err(err) => println!("Node with Id: {} return an Error {:?}", i, err),
+                Ok(_) => ()
+
+            }
             node.close();
         }));
     }
 
-    for handle in handles {
-        let _ = handle.join();
+    for (idx, handle) in handles.into_iter().enumerate() {
+        let err = handle.join();
+        println!("Closed thread {}", idx);
+        match err {
+            Err(err) => println!("Error {:?}", err),
+            Ok(_) => ()
+
+        }
     }
 
     Ok(())

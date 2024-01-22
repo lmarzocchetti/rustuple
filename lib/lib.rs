@@ -32,7 +32,7 @@ pub mod data {
     }
 
     /// Values allowed in the Field type
-    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
     pub enum Value {
         Integer(i32),
         String(String),
@@ -67,7 +67,7 @@ pub mod data {
     }
 
     /// Basic type for the Tuple Space
-    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+    #[derive(Serialize, Deserialize, Clone, Debug)]
     pub struct Tuple {
         tuples: Vec<Field>,
     }
@@ -91,6 +91,19 @@ pub mod data {
             }
 
             true
+        }
+
+        pub fn equal(&self, other: &Tuple) -> bool {
+            let mut is_equal = true;
+
+            for (this, other) in self.iter().zip(other.iter()) {
+                if this != other {
+                    is_equal = false;
+                    break;
+                }
+            }
+
+            is_equal
         }
 
         pub fn len(&self) -> usize {
