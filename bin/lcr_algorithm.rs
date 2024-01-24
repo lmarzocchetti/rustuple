@@ -11,12 +11,17 @@ struct Node {
     id: i32,
     right_neighbor: i32,
     current_leader: i32,
-    tuple_space: TupleSpace
+    tuple_space: TupleSpace,
 }
 
 impl Node {
     fn new(id: i32, right_neighbor: i32, ip_addr: &str) -> Self {
-        Node { id:id, right_neighbor: right_neighbor, current_leader: 0, tuple_space: TupleSpace::new(ip_addr) }
+        Node {
+            id: id,
+            right_neighbor: right_neighbor,
+            current_leader: 0,
+            tuple_space: TupleSpace::new(ip_addr),
+        }
     }
 
     /// Message is composed by this tuple (id_receiver, id)
@@ -25,11 +30,11 @@ impl Node {
             Field::Value(Value::Integer(self.right_neighbor)),
             Field::Value(Value::Integer(prop_id))
         );
-        
+
         match self.tuple_space.out(tuple) {
             Ok(_) => Ok(()),
             Err(TupleError::TupleAlreadyPresentError) => Ok(()),
-            Err(err) =>  Err(err)   
+            Err(err) => Err(err),
         }
     }
 
@@ -63,24 +68,24 @@ impl Node {
                 match val[0].iter().last().unwrap() {
                     Field::Value(Value::Integer(id)) => {
                         return Ok(id.clone());
-                    },
-                    _ => panic!("Not possible")
+                    }
+                    _ => panic!("Not possible"),
                 };
-            },
-            Err(_) => Err(TupleError::Error)
+            }
+            Err(_) => Err(TupleError::Error),
         }
     }
 
     fn received_max(vector: &Vec<Tuple>) -> Vec<Tuple> {
-        let a = vector.iter().enumerate().map(|(idx, a)| {
-            match a.iter().last().unwrap() {
+        let a = vector
+            .iter()
+            .enumerate()
+            .map(|(idx, a)| match a.iter().last().unwrap() {
                 Field::Value(Value::Integer(val)) => (idx, val.clone()),
                 _ => (idx, 0),
-            }
-        })
-        .max_by_key(|x| {
-            x.1
-        }).unwrap();
+            })
+            .max_by_key(|x| x.1)
+            .unwrap();
 
         let ret = &vector[a.0];
 
@@ -95,18 +100,21 @@ impl Node {
             let halt = self.control_halt_message();
             let _ = match halt {
                 Ok(val) => {
-                    println!("Id {}: Received HALT message from {}, it is the new Leader!", self.id, val);
+                    println!(
+                        "Id {}: Received HALT message from {}, it is the new Leader!",
+                        self.id, val
+                    );
                     self.current_leader = val;
                     break;
-                },
-                Err(_) => ()
+                }
+                Err(_) => (),
             };
 
             let mut received_proposal: Vec<Tuple>;
             let received_proposal_or_err = self.receive_leader_proposal();
             match received_proposal_or_err {
                 Ok(val) => received_proposal = val,
-                Err(_) => continue
+                Err(_) => continue,
             }
 
             if received_proposal.len() != 1 && !received_proposal.is_empty() {
@@ -118,21 +126,25 @@ impl Node {
             match received_proposal[0].iter().last().unwrap() {
                 Field::Value(Value::Integer(val)) => {
                     if val > &self.id {
-                        println!("Id {}: Received proposal from {}. I'm going to FORWARD it!", self.id, val);
+                        println!(
+                            "Id {}: Received proposal from {}. I'm going to FORWARD it!",
+                            self.id, val
+                        );
                         self.send_leader_proposal(*val)?;
-                    }
-                    else if val < &self.id {
-                        println!("Id {}: Received proposal from {}. I'm going to DISCARD it!", self.id, val);
+                    } else if val < &self.id {
+                        println!(
+                            "Id {}: Received proposal from {}. I'm going to DISCARD it!",
+                            self.id, val
+                        );
                         self.send_leader_proposal(self.id)?;
-                    }
-                    else {
+                    } else {
                         println!("Id {}: Received proposal with my Id. I'm going to HALT message to everyone to declare myself as the new leader!", self.id);
                         self.current_leader = self.id;
                         self.send_halt_message()?;
                         break;
                     }
-                },
-                _ => panic!("Not possible")
+                }
+                _ => panic!("Not possible"),
             };
         }
 
@@ -147,10 +159,10 @@ impl Node {
 fn main() -> Result<(), TupleError> {
     let mut handles = vec![];
 
-    for i in 1..NUM_NODES+1 {
+    for i in 1..NUM_NODES + 1 {
         handles.push(spawn(move || {
             let mut right = i + 1;
-            
+
             if i == NUM_NODES {
                 right = 1;
             }
@@ -161,8 +173,7 @@ fn main() -> Result<(), TupleError> {
             let err = node.run();
             match err {
                 Err(err) => println!("Node with Id: {} return an Error {:?}", i, err),
-                Ok(_) => ()
-
+                Ok(_) => (),
             }
             node.close();
         }));
@@ -173,8 +184,7 @@ fn main() -> Result<(), TupleError> {
         println!("Closed thread {}", idx);
         match err {
             Err(err) => println!("Error {:?}", err),
-            Ok(_) => ()
-
+            Ok(_) => (),
         }
     }
 
