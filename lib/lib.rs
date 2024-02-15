@@ -12,7 +12,7 @@ pub mod data {
         TupleOnlyDataError,
         NoMatchingTupleError,
         Error,
-        NoError
+        NoError,
     }
 
     /// Type allowed in the Field type to do pattern matching
@@ -26,7 +26,7 @@ pub mod data {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Type::Integer => write!(f, "Integer"),
-                Type::String => write!(f, "String")
+                Type::String => write!(f, "String"),
             }
         }
     }
@@ -42,7 +42,7 @@ pub mod data {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Value::Integer(val) => write!(f, "{}", val),
-                Value::String(val) => write!(f, "{}", val)
+                Value::String(val) => write!(f, "{}", val),
             }
         }
     }
@@ -61,7 +61,7 @@ pub mod data {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Field::Value(val) => write!(f, "{}", val),
-                Field::Type(val) => write!(f, "{}", val)
+                Field::Type(val) => write!(f, "{}", val),
             }
         }
     }
@@ -86,7 +86,7 @@ pub mod data {
             for i in self.tuples.iter() {
                 match i {
                     Field::Type(_) => return false,
-                    _ => continue
+                    _ => continue,
                 }
             }
 
@@ -122,37 +122,26 @@ pub mod data {
                     Field::Value(_) => {
                         if i == j {
                             continue;
-                        }
-                        else {
+                        } else {
                             return false;
                         }
-                    },
-                    Field::Type(tp) => {
-                        match tp {
-                            Type::Integer => {
-                                match i {
-                                    Field::Value(val) => {
-                                        match val {
-                                            Value::Integer(_) => continue,
-                                            _ => return false
-                                        }
-                                    },
-                                    _ => panic!("Saved a tuple with a type Field!")
-                                }
-                            },
-                            Type::String => {
-                                match i {
-                                    Field::Value(val) => {
-                                        match val {
-                                            Value::String(_) => continue,
-                                            _ => return false
-                                        }
-                                    },
-                                    _ => panic!("Saved a tuple with a type Field!")
-                                }
-                            }
-                        }
                     }
+                    Field::Type(tp) => match tp {
+                        Type::Integer => match i {
+                            Field::Value(val) => match val {
+                                Value::Integer(_) => continue,
+                                _ => return false,
+                            },
+                            _ => panic!("Saved a tuple with a type Field!"),
+                        },
+                        Type::String => match i {
+                            Field::Value(val) => match val {
+                                Value::String(_) => continue,
+                                _ => return false,
+                            },
+                            _ => panic!("Saved a tuple with a type Field!"),
+                        },
+                    },
                 }
             }
             true
@@ -167,13 +156,12 @@ pub mod data {
                 if idx != self.tuples.len() - 1 {
                     match write!(f, "{}, ", i) {
                         Ok(_) => (),
-                        Err(_) => ()
+                        Err(_) => (),
                     }
-                }
-                else {
+                } else {
                     match write!(f, "{})", i) {
                         Ok(_) => (),
-                        Err(_) => ()
+                        Err(_) => (),
                     }
                 }
             }
@@ -221,26 +209,25 @@ macro_rules! tuple {
 pub mod tuple_space {
     use std::net::TcpStream;
 
-    use tungstenite::{connect, Message, WebSocket, stream::MaybeTlsStream};
+    use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
     use url::Url;
 
-    use crate::data::{Tuple, Operation, TupleError};
+    use crate::data::{Operation, Tuple, TupleError};
 
     /// Struct to handle the connection and the operation between the client and the server
     pub struct TupleSpace {
-        socket: WebSocket<MaybeTlsStream<TcpStream>>
+        socket: WebSocket<MaybeTlsStream<TcpStream>>,
     }
 
     impl TupleSpace {
         /// Construct a new Tuple Space and open the connection on the ip address and port passed in
         pub fn new(ip_addr: &str) -> Self {
-            let (socket, response) = 
-                connect(Url::parse(ip_addr).unwrap()).expect("Can't connect");
-            
+            let (socket, response) = connect(Url::parse(ip_addr).unwrap()).expect("Can't connect");
+
             println!("Connected to the server");
             println!("Response HTTP code: {}", response.status());
 
-            TupleSpace{socket: socket}
+            TupleSpace { socket }
         }
 
         fn serialize(operation: Operation) -> Result<String, TupleError> {
@@ -255,15 +242,15 @@ pub mod tuple_space {
 
         fn deserialize_error(msg: Message) -> TupleError {
             match msg {
-                Message::Text(val) => return serde_json::from_str(&val).unwrap(),
-                _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!")
+                Message::Text(val) => serde_json::from_str(&val).unwrap(),
+                _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!"),
             }
         }
 
         fn deserialize_vector(msg: Message) -> Result<Vec<Tuple>, serde_json::Error> {
             match msg {
-                Message::Text(val) => return serde_json::from_str(&val),
-                _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!")
+                Message::Text(val) => serde_json::from_str(&val),
+                _ => panic!("Errore: Messaggio ricevuto non e' in forma testuale!"),
             }
         }
 
@@ -277,32 +264,30 @@ pub mod tuple_space {
         pub fn out(&mut self, tuple: Tuple) -> Result<(), TupleError> {
             let serialized = TupleSpace::serialize(Operation::Out(tuple))?;
 
-            let send = self.socket
-                .send(Message::Text(serialized));
+            let send = self.socket.send(Message::Text(serialized));
 
             match send {
                 Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
+                Err(_) => return Err(TupleError::Error),
             }
 
             let res = self.socket.read().unwrap();
             let res_deser = TupleSpace::deserialize_error(res);
             match res_deser {
-                TupleError::NoError => return Ok(()),
-                TupleError::TupleNotOnlyDataError => return Err(TupleError::TupleNotOnlyDataError),
-                TupleError::TupleAlreadyPresentError => return Err(TupleError::TupleAlreadyPresentError),
-                _ => return Err(TupleError::Error)
+                TupleError::NoError => Ok(()),
+                TupleError::TupleNotOnlyDataError => Err(TupleError::TupleNotOnlyDataError),
+                TupleError::TupleAlreadyPresentError => Err(TupleError::TupleAlreadyPresentError),
+                _ => Err(TupleError::Error),
             }
         }
 
         /// Implementation of the operations which are the same for the in and rd operation (blocking and non-blocking)
         fn in_rd(&mut self, operation: String) -> Result<Vec<Tuple>, TupleError> {
-            let res = self.socket
-                .send(Message::Text(operation));
+            let res = self.socket.send(Message::Text(operation));
 
             match res {
                 Ok(_) => (),
-                Err(_) => return Err(TupleError::Error)
+                Err(_) => return Err(TupleError::Error),
             }
 
             let res = self.socket.read().unwrap();
@@ -318,7 +303,7 @@ pub mod tuple_space {
 
             match no {
                 TupleError::NoError => Ok(vector),
-                _ => Err(no)
+                _ => Err(no),
             }
         }
 
